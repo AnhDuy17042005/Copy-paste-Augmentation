@@ -1,0 +1,20 @@
+train: train/images
+val: valid/images
+test: test/images
+
+nc: 13 
+
+names:
+  0: be_khong_sl
+  1: bt
+  2: decay
+  3: hat_loai_2
+  4: hat_loai_3
+  5: lbw
+  6: ow
+  7: phe
+  8: sk
+  9: st
+  10: tbts
+  11: vo_cung
+  12: ww

@@ -1,0 +1,16 @@
+hsv_h: 0.0        # Sắc độ
+hsv_s: 0.5        # Bão hoà
+hsv_v: 0.5        # Độ sáng
+
+degrees: 20.0     # Xoay
+translate: 0.05    # Dịch chuyển 
+scale: 0.1       # Phóng to/thu nhỏ 
+shear: 0.0        # Méo hình
+
+fliplr: 0.0       # Lật ngang 
+flipud: 0.0       # Lật dọc 
+
+mosaic: 0.0       # Mosaic
+mixup: 0.0        # Mixup
+cutmix: 0.0       # Cutmix
+copy_paste: 0.0   # Copy-Paste
