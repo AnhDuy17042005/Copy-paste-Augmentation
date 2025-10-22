@@ -3,7 +3,7 @@ import numpy as np
 import random
 from pathlib import Path
 
-N_MIX_IMG      = 5      # số lượng ảnh mix
+N_MIX_IMG      = 130      # số lượng ảnh mix
 IOU            = 0.15
 
 # các thông số augmentation nếu muốn dùng
@@ -13,8 +13,8 @@ RANDOM_ROTATE  = True
 
 BASE_DIR       = Path(__file__).resolve().parent.parent
 BACKGROUND_DIR = BASE_DIR / "background"        # Nguồn ảnh background
-OUTPUT_DIR     = BASE_DIR / "mix_data_ver4"
-OBJECTS_DIR    = BASE_DIR / "pred_labels_ver4"
+OUTPUT_DIR     = BASE_DIR / "mix_data_ver2"
+OBJECTS_DIR    = BASE_DIR / "pred_labels"
 
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 (OUTPUT_DIR / "images").mkdir(parents=True, exist_ok=True)
@@ -22,27 +22,30 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 CLASS_MAP = {
     "be_khong_sl": 0,
-    "bt": 1,
-    "decay": 2,
-    "hat_loai_2": 3,
-    "hat_loai_3": 4,
-    "lbw": 5,
-    "ow": 6,
-    "phe": 7,
-    "sk": 8,
-    "st": 9,
-    "tbts": 10,
-    "vo_cung": 11,
-    "ww": 12,
+    "bt":          1,
+    "decay":       2,
+    "hat_loai_2":  3,
+    "hat_loai_3":  4,
+    "lbw":         5,
+    "ow":          6,
+    "phe":         7,
+    "sk":          8,
+    "st":          9,
+    "tbts":        10,
+    "vo_cung":     11,
+    "ww":          12,
 }
+
+NUM_OF_CLASS   = len(CLASS_MAP)
+BALANCE_ERROR  = 5                  # n% sai số khi cân bằng class
 
 # Tải background 
 background_path = BACKGROUND_DIR / "background.png"     # Chọn background
 if not background_path.exists():
     raise FileNotFoundError(f"Không tìm thấy ảnh background")
 
+# ============================= ROI =========================================
 def select_roi(background_path, display_size=(640,640)):
-
     roi_points = []
 
     bg_for_roi = cv2.imread(str(background_path))
@@ -94,6 +97,7 @@ def select_roi(background_path, display_size=(640,640)):
 
     return roi_mask, orig_h, orig_w
 
+# =========================== PASTE OBJECT =================================
 def paste_object(background, obj, position):
     x, y = position
 
@@ -121,13 +125,15 @@ def paste_object(background, obj, position):
         cnt[:, 0] += x
         cnt[:, 1] += y
         polys.append(cnt)
+
     return background, polys
 
+# ============================ AUGMENT =====================================
 def random_transform(obj):
     h, w = obj.shape[:2]
     size = (w, h)
 
-    if RANDOM_FLIP and random.random() < 30:
+    if RANDOM_FLIP and random.random() < 0.30:
         # Random flip
         obj = cv2.flip(obj, 1)
 
@@ -138,6 +144,7 @@ def random_transform(obj):
         obj = cv2.warpAffine(obj, M, size, flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(0,0,0,0))
     return obj
 
+# ============================ MASK IOU ====================================
 def mask_iou(maskA, maskB):
     # Tính IoU giữa 2 mask nhị phân 
     maskA = maskA > 0
@@ -148,6 +155,7 @@ def mask_iou(maskA, maskB):
         return 0.0
     return intersection / union
 
+# ============================ LABEL =======================================
 def label_obj(txt_path, polygons, w, h):
     lines = []
     for poly, class_id in polygons:
@@ -162,22 +170,65 @@ def label_obj(txt_path, polygons, w, h):
     with open(txt_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
-def mix_images(background_path, object_imgs, output_dir, roi_mask, n_mix=N_MIX_IMG):
+# =========================== CLASS BALANCING ==============================
+def class_balancing(num_of_class, n_mix_img, balance_error):
+    error  = balance_error/100.0
+    target = n_mix_img/num_of_class
+    min_class = int((1-error)*target)
+    max_class = int((1+error)*target)
+
+    class_count = [0] * num_of_class
+    class_list = []
+
+    for _ in range(n_mix_img):
+        available = [i for i in range(num_of_class) if class_count[i] < max_class]
+        # Nếu mọi class đều đạt max_class, reset
+        if not available:
+            available = list(range(num_of_class))
+
+        chosen = random.choice(available)
+        class_count[chosen] += 1
+        class_list.append(chosen)
+    # In thống kê phân phối
+    print("\n=== Thống kê phân phối class ID ===")
+    for i, cnt in enumerate(class_count):
+        print(f"Class {i:02d}: {cnt}  (target≈{target:.1f}, range [{min_class}, {max_class}])")
+    print("=" * 45)
+    return class_list
+
+# ============================== MIX =====================================
+def mix_images(background_path, output_dir, roi_mask, n_mix=N_MIX_IMG):
+
+    class_distribution = class_balancing(NUM_OF_CLASS, N_MIX_IMG, BALANCE_ERROR)
     start_idx = len(list((output_dir / "images").glob("mixed_*.png")))
+
     for idx in range(start_idx, start_idx + n_mix):
         background = cv2.imread(str(background_path))
         h, w = background.shape[:2]
         polygons_all = []
         mask_list = []
 
+        # Lấy class id
+        class_id   = class_distribution[idx]
+        class_name = list(CLASS_MAP.keys())[class_id]
 
-        nums_obj = random.randint(50, 60)
+        obj_folder = OBJECTS_DIR / class_name / "object"
+        if not obj_folder.exists():
+            print(f"Không tìm thấy folder object cho class: {class_name}")
+            continue
+        object_imgs = list(obj_folder.rglob("*.png"))
+        if not object_imgs:
+            print(f"Không tìm thấy ảnh nào trong class: {class_name}")
+            continue
+        nums_obj = random.randint(50, 60) # Số obj xuất hiện trên 1 ảnh
+
         for _ in range(nums_obj):
             obj_path = random.choice(object_imgs)
             obj = cv2.imread(str(obj_path), cv2.IMREAD_UNCHANGED)
             if obj is None or obj.shape[2] != 4:
                 continue
-
+            
+            # Augmentation
             obj = random_transform(obj)
 
             for _ in range(100):
@@ -203,10 +254,6 @@ def mix_images(background_path, object_imgs, output_dir, roi_mask, n_mix=N_MIX_I
                     background, polys = paste_object(background, obj, (x,y))
 
                     if polys:
-                        # Xác định thư mục class hiện tại
-                        class_name = obj_path.parents[2].name
-                        class_id = CLASS_MAP.get(class_name, 0)
-
                         for poly in polys:
                             poly = np.array(poly).reshape(-1, 2)
                             polygons_all.append((poly, class_id))
@@ -225,15 +272,10 @@ def mix_images(background_path, object_imgs, output_dir, roi_mask, n_mix=N_MIX_I
 
     print("Mix xong, check ở folder:", output_dir)
 
+# ============================== MAIN ====================================
 if __name__ == "__main__":
     # B1: chọn ROI
     roi_mask, orig_h, orig_w = select_roi(background_path)
     
     # B2: mix ảnh
-    object_imgs = []
-    for cls_dir in OBJECTS_DIR.iterdir():
-        object_dir = cls_dir/"object"
-        if object_dir.exists():
-            object_imgs += list(object_dir.rglob("*.png"))
-
-    mix_images(background_path, object_imgs, OUTPUT_DIR, roi_mask, n_mix=N_MIX_IMG)
+    mix_images(background_path, OUTPUT_DIR, roi_mask, n_mix=N_MIX_IMG)
