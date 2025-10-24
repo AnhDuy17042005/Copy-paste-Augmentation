@@ -3,7 +3,7 @@ import numpy as np
 import random
 from pathlib import Path
 
-N_MIX_IMG      = 130      # số lượng ảnh mix
+N_MIX_IMG      = 5      # số lượng ảnh mix
 IOU            = 0.15
 
 # các thông số augmentation nếu muốn dùng
@@ -13,8 +13,8 @@ RANDOM_ROTATE  = True
 
 BASE_DIR       = Path(__file__).resolve().parent.parent
 BACKGROUND_DIR = BASE_DIR / "background"        # Nguồn ảnh background
-OUTPUT_DIR     = BASE_DIR / "mix_data_ver2"
 OBJECTS_DIR    = BASE_DIR / "pred_labels"
+OUTPUT_DIR     = BASE_DIR / "mix_data_ver2"
 
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 (OUTPUT_DIR / "images").mkdir(parents=True, exist_ok=True)
@@ -37,7 +37,7 @@ CLASS_MAP = {
 }
 
 NUM_OF_CLASS   = len(CLASS_MAP)
-BALANCE_ERROR  = 5                  # n% sai số khi cân bằng class
+NUM_OBJECT     = (60,70)
 
 # Tải background 
 background_path = BACKGROUND_DIR / "background.png"     # Chọn background
@@ -171,35 +171,41 @@ def label_obj(txt_path, polygons, w, h):
         f.write("\n".join(lines))
 
 # =========================== CLASS BALANCING ==============================
-def class_balancing(num_of_class, n_mix_img, balance_error):
-    error  = balance_error/100.0
-    target = n_mix_img/num_of_class
-    min_class = int((1-error)*target)
-    max_class = int((1+error)*target)
+def class_balancing(num_of_class, total_objects):
+    target = total_objects / num_of_class
 
-    class_count = [0] * num_of_class
+    base = total_objects // num_of_class
+    remainder = total_objects % num_of_class
+
+    class_count = [base] * num_of_class
+    for i in random.sample(range(num_of_class), remainder):
+        class_count[i] += 1  # chia đều phần dư
+
+    # Tạo danh sách class theo phân phối vừa tính
     class_list = []
+    for cid, count in enumerate(class_count):
+        class_list.extend([cid] * count)
 
-    for _ in range(n_mix_img):
-        available = [i for i in range(num_of_class) if class_count[i] < max_class]
-        # Nếu mọi class đều đạt max_class, reset
-        if not available:
-            available = list(range(num_of_class))
+    random.shuffle(class_list)  # trộn ngẫu nhiên toàn bộ danh sách
 
-        chosen = random.choice(available)
-        class_count[chosen] += 1
-        class_list.append(chosen)
-    # In thống kê phân phối
-    print("\n=== Thống kê phân phối class ID ===")
+    # In thống kê
+    print("\n=== Phân phối class toàn bộ dataset ===")
     for i, cnt in enumerate(class_count):
-        print(f"Class {i:02d}: {cnt}  (target≈{target:.1f}, range [{min_class}, {max_class}])")
+        print(f"Class {i:02d}: {cnt:4d} -- target ≈ {target:.1f}")
     print("=" * 45)
     return class_list
 
 # ============================== MIX =====================================
 def mix_images(background_path, output_dir, roi_mask, n_mix=N_MIX_IMG):
+    total_obj = 0
+    h, w = cv2.imread(str(background_path)).shape[:2]
+    average_obj = int((NUM_OBJECT[0] + NUM_OBJECT[1])/2)
+    total_objects = n_mix * average_obj 
 
-    class_distribution = class_balancing(NUM_OF_CLASS, N_MIX_IMG, BALANCE_ERROR)
+    # Phân phối class cho toàn bộ object của tất cả ảnh
+    class_distribution = class_balancing(NUM_OF_CLASS, total_objects)
+    idx_class = 0 
+
     start_idx = len(list((output_dir / "images").glob("mixed_*.png")))
 
     for idx in range(start_idx, start_idx + n_mix):
@@ -208,21 +214,26 @@ def mix_images(background_path, output_dir, roi_mask, n_mix=N_MIX_IMG):
         polygons_all = []
         mask_list = []
 
-        # Lấy class id
-        class_id   = class_distribution[idx]
-        class_name = list(CLASS_MAP.keys())[class_id]
-
-        obj_folder = OBJECTS_DIR / class_name / "object"
-        if not obj_folder.exists():
-            print(f"Không tìm thấy folder object cho class: {class_name}")
-            continue
-        object_imgs = list(obj_folder.rglob("*.png"))
-        if not object_imgs:
-            print(f"Không tìm thấy ảnh nào trong class: {class_name}")
-            continue
-        nums_obj = random.randint(50, 60) # Số obj xuất hiện trên 1 ảnh
+        nums_obj = random.randint(NUM_OBJECT[0], NUM_OBJECT[1]) # Số obj xuất hiện trên 1 ảnh
+        total_obj += nums_obj
 
         for _ in range(nums_obj):
+
+            if idx_class >= len(class_distribution):
+                break
+            class_id = class_distribution[idx_class]
+            idx_class += 1
+            class_name = list(CLASS_MAP.keys())[class_id]
+
+            obj_folder = OBJECTS_DIR / class_name / "object"
+            if not obj_folder.exists():
+                print(f"Không tìm thấy folder object cho class: {class_name}")
+                continue
+            object_imgs = list(obj_folder.rglob("*.png"))
+            if not object_imgs:
+                print(f"Không tìm thấy ảnh nào trong class: {class_name}")
+                continue
+            
             obj_path = random.choice(object_imgs)
             obj = cv2.imread(str(obj_path), cv2.IMREAD_UNCHANGED)
             if obj is None or obj.shape[2] != 4:
@@ -267,8 +278,9 @@ def mix_images(background_path, output_dir, roi_mask, n_mix=N_MIX_IMG):
         label_obj(out_label_path, polygons_all, w, h)
 
         print(f"\n[Epoch {idx+1:04d}/{n_mix}] " + "="*30)
-        print(f" === Saved: mixed_{idx}.png")
+        print(f"=== Saved: mixed_{idx}.png")
         print("   " + "-"*45)
+        print(f"=== Tổng hạt điều: {total_obj}")
 
     print("Mix xong, check ở folder:", output_dir)
 
