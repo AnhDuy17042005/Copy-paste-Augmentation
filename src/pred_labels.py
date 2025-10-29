@@ -2,12 +2,14 @@ from pathlib import Path
 import cv2
 import numpy as np
 from ultralytics import YOLO
+from segment_anything import sam_model_registry, SamPredictor
 
 # Configs
 BASE_DIR       = Path(__file__).resolve().parent.parent
 MODEL          = BASE_DIR / "model" / "hatdieu_seg_ver2.pt"
+SAM            = BASE_DIR / "model" / "sam_vit_b_01ec64.pth"
 SOURE_DIR      = BASE_DIR / "Data_hatdieu_test"              
-OUT_DIR        = BASE_DIR / "pred_labels_ver4"
+OUT_DIR        = BASE_DIR / "pred_labels_ver2"
 CONFIDENT      = 0.5
 
 # Paraments smooth viền
@@ -23,6 +25,9 @@ MIN_AREA_RATIO = 0.001       # Tỷ lệ vật thể tối thiểu để lọc
 
 # Load model
 model = YOLO(MODEL)
+sam = sam_model_registry["vit_b"](checkpoint=SAM)
+sam.to(device='cpu')
+predictor = SamPredictor(sam)
 
 # Tạo file txt
 def label_obj(txt_path, instances, width, height):
@@ -182,6 +187,7 @@ def main():
             stem     = img_path.stem  # Lấy tên file không lấy đuôi ext
 
             img_bgr = cv2.imread(str(img_path))
+            print(f"\n=== Đang xử lý ảnh: {stem}")
     
             # Vẽ visualization
             visualize = r.plot()    # Vẽ segment predict
@@ -204,6 +210,7 @@ def main():
                 # Thư mục chứa mask instance png
                 object_out_dir = object_dir / stem
                 object_out_dir.mkdir(parents=True, exist_ok=True)
+                predictor.set_image(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
 
                 for i in range(num):
 
@@ -216,7 +223,23 @@ def main():
                     
                     m = (m > 0.5).astype(np.uint8) * 255
 
-                    polys = smooth_binary_mask(m, w, h)
+                    x1, y1, x2, y2 = map(int, r.boxes.xyxy[i].cpu().numpy())
+
+                    # SAM predict mask
+                    masks, _, _ = predictor.predict(
+                        point_coords=None,
+                        point_labels=None,
+                        box=np.array([x1, y1, x2, y2]),
+                        multimask_output=False
+                    )
+
+                    # Lấy mask SAM
+                    mask_sam = masks[0].astype(np.uint8) * 255
+
+                    # Cắt mask về kích thước gốc ảnh 
+                    mask_sam = cv2.resize(mask_sam, (w, h), interpolation=cv2.INTER_NEAREST)
+
+                    polys = smooth_binary_mask(mask_sam, w, h)
 
                     # Lưu mask và object PNG
                     for k, poly in enumerate(polys, 1):
@@ -229,6 +252,7 @@ def main():
                         # Object PNG nền trong suốt
                         drop = object_out_dir / f"{i+1}_{k}_cls{class_id}.png"
                         extract_object(img_bgr, mm, drop)
+                        print(f"------ Cut object {i+1}_{k}_cls{class_id}.png")
 
                     for poly in polys:
                         instances.append({"cls": class_id, "conf": conf, "poly": poly})
@@ -239,6 +263,7 @@ def main():
                 instances=instances,
                 width=w, height=h
             )
+            print(f"=== Hoàn tất ảnh: {stem}, tổng số object: {len(instances)}\n")
         print(f"--- Xong {cls_name}, kết quả ở: {OUT_DIR}/{cls_name}")
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ RANDOM_ROTATE  = True
 
 BASE_DIR       = Path(__file__).resolve().parent.parent
 BACKGROUND_DIR = BASE_DIR / "background"        # Nguồn ảnh background
-OBJECTS_DIR    = BASE_DIR / "pred_labels"
+OBJECTS_DIR    = BASE_DIR / "pred_labels_ver2"
 OUTPUT_DIR     = BASE_DIR / "mix_data_ver2"
 
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
