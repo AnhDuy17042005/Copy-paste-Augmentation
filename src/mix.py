@@ -3,8 +3,8 @@ import numpy as np
 import random
 from pathlib import Path
 
-N_MIX_IMG      = 5      # số lượng ảnh mix
-IOU            = 0.15
+N_MIX_IMG      = 1     # số lượng ảnh mix
+IOU            = 0.2
 
 # các thông số augmentation nếu muốn dùng
 RESIZE         = False  
@@ -13,8 +13,8 @@ RANDOM_ROTATE  = True
 
 BASE_DIR       = Path(__file__).resolve().parent.parent
 BACKGROUND_DIR = BASE_DIR / "background"        # Nguồn ảnh background
-OBJECTS_DIR    = BASE_DIR / "pred_labels_ver2"
-OUTPUT_DIR     = BASE_DIR / "mix_data_ver2"
+OBJECTS_DIR    = BASE_DIR / "pred_labels_test"
+OUTPUT_DIR     = BASE_DIR / "mix_data_test"
 
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 (OUTPUT_DIR / "images").mkdir(parents=True, exist_ok=True)
@@ -38,6 +38,23 @@ CLASS_MAP = {
 
 NUM_OF_CLASS   = len(CLASS_MAP)
 NUM_OBJECT     = (60,70)
+
+# ========================== REALISM PARAMS =================================
+SHADOW_MODE = True
+
+GAUSSIAN_SIGMA          = 0.8         # Làm mềm viền
+ALPHA_BINARY_THRESOLD   = 0.5         # Ngưỡng mask object
+
+# Hướng bóng đổ
+X_LIGHT     = 10
+Y_LIGHT     = 7
+
+BASE_DILATE_SHADOW      = 2
+BASE_BLUR_SHADOW        = 11          # Mượt bóng tại viền
+BASE_STRENGTH_SHADOW    = 0.17       # Cường độ bóng tại viền
+
+CAST_BLUR_SHADOW        = 25         # Mượt bóng đổ
+CAST_STRENGTH_SHADOW    = 0.26
 
 # Tải background 
 background_path = BACKGROUND_DIR / "background.png"     # Chọn background
@@ -97,6 +114,34 @@ def select_roi(background_path, display_size=(640,640)):
 
     return roi_mask, orig_h, orig_w
 
+# =========================== SHADOW OBJECT ================================
+
+def _feather_alpha(alpha, sigma):
+    kernel = int(max(3, (sigma * 6) // 2 * 2 + 1))
+    a = cv2.GaussianBlur(alpha, (kernel, kernel), sigmaX=sigma, sigmaY=sigma)
+    return np.clip(a, 0, 1)
+
+def _apply_shadow(background_bgr, shadow_mask, strength):
+    s = np.clip(shadow_mask * strength, 0.0, 0.85)
+    factor = (1.0 - s)[..., None]
+    background_bgr[:] = np.clip(background_bgr.astype(np.float32) * factor, 0, 255).astype(np.uint8)
+
+def _shadow_fullmask(full_obj_mask, blur_kernel_size, dilate, dx, dy):
+    mask = full_obj_mask.copy()
+
+    if dilate > 0:
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (dilate * 2 + 1, dilate * 2 + 1))
+        mask = cv2.dilate(mask, kernel)        
+
+    M = np.float32([[1, 0, dx], [0, 1, dy]])
+    mask = cv2.warpAffine(mask, M, (mask.shape[1], mask.shape[0]), flags=cv2.INTER_NEAREST, borderValue=0)
+
+    kernel_size = int(blur_kernel_size // 2 * 2 + 1)
+    if kernel_size > 3:
+        mask = cv2.GaussianBlur(mask, (kernel_size, kernel_size), 0)
+
+    return mask.astype(np.float32) / 255.0
+
 # =========================== PASTE OBJECT =================================
 def paste_object(background, obj, position):
     x, y = position
@@ -108,18 +153,55 @@ def paste_object(background, obj, position):
     if x + object_w > background_w or y + object_h > background_h:
         return background
 
-    # Kênh alpha
-    alpha = obj[:,:,3] / 255.0
+    # Kênh alpha (0..1)
+    alpha = obj[:,:,3].astype(np.float32) / 255.0
 
     alpha_3 = alpha[..., None]
     background[y:y+object_h, x:x+object_w, :3] = (
         (1 - alpha_3) * background[y:y+object_h, x:x+object_w, :3] + alpha_3 * obj[..., :3]
     )
     
-    mask = (alpha > 0.5).astype(np.uint8)*255
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    polys = []
+    mask_hard = (alpha > ALPHA_BINARY_THRESOLD).astype(np.uint8) * 255
+    if mask_hard.sum() == 0:
+        return background, []
 
+    # Feather alpha chỉ để blend viền đẹp khi paste
+    alpha_f = _feather_alpha(alpha, GAUSSIAN_SIGMA)
+    alpha_3_f = alpha_f[..., None]
+
+    # apply trước khi paste để không làm tối object 
+    if SHADOW_MODE:
+        full_obj_mask = np.zeros((background_h, background_w), np.uint8)
+        full_obj_mask[y:y+object_h, x:x+object_w] = mask_hard  # dùng mask cứng
+
+        # contact/base shadow: nhẹ thôi (nếu để 0.2 sẽ tối nền rất nhanh)
+        base_shadow = _shadow_fullmask(
+            full_obj_mask,
+            BASE_BLUR_SHADOW,
+            BASE_DILATE_SHADOW,
+            0, 0
+        )
+        _apply_shadow(background, base_shadow, BASE_STRENGTH_SHADOW)
+
+        # cast shadow
+        cast_shadow = _shadow_fullmask(
+            full_obj_mask,
+            CAST_BLUR_SHADOW,
+            0,
+            X_LIGHT, Y_LIGHT
+        )
+        _apply_shadow(background, cast_shadow, CAST_STRENGTH_SHADOW)
+
+    roi = background[y:y+object_h, x:x+object_w, :3].astype(np.float32)
+    obj_rgb = obj[..., :3].astype(np.float32)
+    background[y:y+object_h, x:x+object_w, :3] = np.clip(
+        roi * (1.0 - alpha_3_f) + obj_rgb * alpha_3_f, 0, 255
+    ).astype(np.uint8)
+
+    obj_mask = (alpha_f > 0.08).astype(np.uint8) * 255
+    contours, _ = cv2.findContours(obj_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    polys = []
     for cnt in contours:
         cnt = cnt.reshape(-1, 2)
         cnt[:, 0] += x
@@ -195,12 +277,43 @@ def class_balancing(num_of_class, total_objects):
     print("=" * 45)
     return class_list
 
+# ========================== LOAD ALL OBJECTS =============================
+def load_all_objects():
+
+    all_objects = {}
+    used_objects = set()  # Theo dõi các object đã sử dụng
+    
+    for class_name, class_id in CLASS_MAP.items():
+        obj_folder = OBJECTS_DIR / class_name / "object"
+        if not obj_folder.exists():
+            print(f"Không tìm thấy folder object cho class: {class_name}")
+            continue
+            
+        object_imgs = list(obj_folder.rglob("*.png"))
+        if not object_imgs:
+            print(f"Không tìm thấy ảnh nào trong class: {class_name}")
+            continue
+            
+        # Lọc chỉ lấy các object chưa được sử dụng
+        available_objects = [obj for obj in object_imgs if obj not in used_objects]
+        
+        if available_objects:
+            all_objects[class_id] = available_objects
+        else:
+            print(f"Cảnh báo: Đã dùng hết object cho class {class_name}")
+            all_objects[class_id] = []
+    
+    return all_objects, used_objects
+
 # ============================== MIX =====================================
 def mix_images(background_path, output_dir, roi_mask, n_mix=N_MIX_IMG):
     total_obj = 0
     h, w = cv2.imread(str(background_path)).shape[:2]
     average_obj = int((NUM_OBJECT[0] + NUM_OBJECT[1])/2)
     total_objects = n_mix * average_obj 
+
+    # Tải tất cả objects và khởi tạo set theo dõi
+    all_objects, used_objects = load_all_objects()
 
     # Phân phối class cho toàn bộ object của tất cả ảnh
     class_distribution = class_balancing(NUM_OF_CLASS, total_objects)
@@ -220,23 +333,25 @@ def mix_images(background_path, output_dir, roi_mask, n_mix=N_MIX_IMG):
         for _ in range(nums_obj):
 
             if idx_class >= len(class_distribution):
+                print("Đã hết object theo phân phối class")
                 break
+
             class_id = class_distribution[idx_class]
             idx_class += 1
             class_name = list(CLASS_MAP.keys())[class_id]
 
-            obj_folder = OBJECTS_DIR / class_name / "object"
-            if not obj_folder.exists():
-                print(f"Không tìm thấy folder object cho class: {class_name}")
+            # Kiểm tra và lấy object từ danh sách chưa dùng
+            if class_id not in all_objects or not all_objects[class_id]:
+                print(f"Đã hết object cho class: {class_name}")
                 continue
-            object_imgs = list(obj_folder.rglob("*.png"))
-            if not object_imgs:
-                print(f"Không tìm thấy ảnh nào trong class: {class_name}")
-                continue
+
+            # Lấy object đầu tiên và xóa khỏi danh sách available
+            obj_path = all_objects[class_id].pop(0)
+            used_objects.add(obj_path)  # Đánh dấu đã sử dụng
             
-            obj_path = random.choice(object_imgs)
             obj = cv2.imread(str(obj_path), cv2.IMREAD_UNCHANGED)
             if obj is None or obj.shape[2] != 4:
+                print(f"Không thể đọc object: {obj_path}")
                 continue
             
             # Augmentation
@@ -283,6 +398,22 @@ def mix_images(background_path, output_dir, roi_mask, n_mix=N_MIX_IMG):
         print(f"=== Tổng hạt điều: {total_obj}")
 
     print("Mix xong, check ở folder:", output_dir)
+    
+    # In thống kê cuối cùng
+    remaining_objects = sum(len(obj_list) for obj_list in all_objects.values()) 
+
+    print("\n=== THỐNG KÊ CUỐI CÙNG ===")
+    print(f"Tổng số object đã sử dụng: {len(used_objects)}")
+    print(f"Số object còn lại: {remaining_objects}")
+
+    # Header bảng
+    print("\n{:<15} {:>10}".format("Class", "Còn lại"))
+    print("-" * 27)
+
+    # Nội dung
+    for class_id, obj_list in all_objects.items():
+        class_name = list(CLASS_MAP.keys())[class_id]
+        print("{:<15} {:>10}".format(class_name, len(obj_list)))
 
 # ============================== MAIN ====================================
 if __name__ == "__main__":

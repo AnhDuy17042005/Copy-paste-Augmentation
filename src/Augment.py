@@ -321,7 +321,6 @@ class DatasetAugmentor:
 
         print("DONE AUGMENT")
 
-
 if __name__ == "__main__":
     aug = DatasetAugmentor(
         INPUT_IMAGES, INPUT_LABELS,

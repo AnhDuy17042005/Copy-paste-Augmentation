@@ -3,11 +3,12 @@ from pathlib import Path
 
 # Configs
 BASE_DIR     = Path(__file__).resolve().parent.parent
-MIX_DIR      = BASE_DIR / "mix_data_ver2"
+MIX_DIR      = BASE_DIR / "mix_data_test"
 SOURE_DIR    = MIX_DIR / "images"      # Nguồn ảnh mix
 LABELS_DIR   = MIX_DIR / "labels"      # nguồn labels
-N_SAMPLES    = 20                       # số ảnh random cần check
+N_SAMPLES    = 50                      # số ảnh random cần check
 DISPLAY_SIZE = (640, 640)
+
 CLASS_COLORS = {
     "0": (255, 0, 0),                  # đỏ
     "1": (0, 255, 0),                  # xanh lá
