@@ -1,8 +1,10 @@
+.vscode/
+.venv/
+__pycache__/
+*.pyc
+
+# Legacy/local data and generated outputs
 Data_hatdieu/
-Data_hatdieu_test/
-mix_data/
 pred_labels/
-check_labels/
-pred_labels_ver2/
-mix_data_ver2/
-model/*.pth
+mix_data/
+data_augment/

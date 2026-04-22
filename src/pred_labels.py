@@ -8,8 +8,8 @@ from segment_anything import sam_model_registry, SamPredictor
 BASE_DIR       = Path(__file__).resolve().parent.parent
 MODEL          = BASE_DIR / "model" / "hatdieu_seg_ver2.pt"
 SAM            = BASE_DIR / "model" / "sam_vit_b_01ec64.pth"
-SOURE_DIR      = BASE_DIR / "Data_hatdieu_test"              
-OUT_DIR        = BASE_DIR / "pred_labels_ver2"
+SOURE_DIR      = BASE_DIR / "Data_hatdieu"              
+OUT_DIR        = BASE_DIR / "pred_labels"
 CONFIDENT      = 0.5
 
 # Paraments smooth viền

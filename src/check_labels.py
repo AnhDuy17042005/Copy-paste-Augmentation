@@ -3,7 +3,7 @@ from pathlib import Path
 
 # Configs
 BASE_DIR     = Path(__file__).resolve().parent.parent
-MIX_DIR      = BASE_DIR / "mix_data_test"
+MIX_DIR      = BASE_DIR / "mix_data"
 SOURE_DIR    = MIX_DIR / "images"      # Nguồn ảnh mix
 LABELS_DIR   = MIX_DIR / "labels"      # nguồn labels
 N_SAMPLES    = 50                      # số ảnh random cần check

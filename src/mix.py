@@ -3,7 +3,7 @@ import numpy as np
 import random
 from pathlib import Path
 
-N_MIX_IMG      = 1     # số lượng ảnh mix
+N_MIX_IMG      = 1000     # số lượng ảnh mix
 IOU            = 0.2
 
 # các thông số augmentation nếu muốn dùng
@@ -13,8 +13,8 @@ RANDOM_ROTATE  = True
 
 BASE_DIR       = Path(__file__).resolve().parent.parent
 BACKGROUND_DIR = BASE_DIR / "background"        # Nguồn ảnh background
-OBJECTS_DIR    = BASE_DIR / "pred_labels_test"
-OUTPUT_DIR     = BASE_DIR / "mix_data_test"
+OBJECTS_DIR    = BASE_DIR / "pred_labels"
+OUTPUT_DIR     = BASE_DIR / "mix_data"
 
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 (OUTPUT_DIR / "images").mkdir(parents=True, exist_ok=True)

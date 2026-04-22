@@ -6,8 +6,8 @@ from pathlib import Path
 
 # == PATH CONFIGS
 BASE_DIR      = Path(__file__).resolve().parent.parent
-INPUT_IMAGES  = BASE_DIR / "mix_data_ver2" / "images"
-INPUT_LABELS  = BASE_DIR / "mix_data_ver2" / "labels"
+INPUT_IMAGES  = BASE_DIR / "mix_data" / "images"
+INPUT_LABELS  = BASE_DIR / "mix_data" / "labels"
 OUTPUT_IMAGES = BASE_DIR / "data_augment" / "images"
 OUTPUT_LABELS = BASE_DIR / "data_augment" / "labels"
 SCALE_DATASET = 2

@@ -3,7 +3,7 @@ from collections import defaultdict
 from pathlib import Path
 
 BASE_DIR  = Path(__file__).resolve().parent.parent
-LABEL_DIR = BASE_DIR/"mix_data_ver3"/"labels"
+LABEL_DIR = BASE_DIR/"mix_data"/"labels"
 
 def count_objects(label_dir):
     class_counts = defaultdict(int)
