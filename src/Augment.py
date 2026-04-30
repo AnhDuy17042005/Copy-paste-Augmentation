@@ -3,20 +3,29 @@ import numpy as np
 import random
 import albumentations as A
 from pathlib import Path
+from config import (
+    AUGMENT_IMAGES_DIR,
+    AUGMENT_LABELS_DIR,
+    MIX_IMAGES_DIR,
+    MIX_LABELS_DIR,
+)
 
-# == PATH CONFIGS
-BASE_DIR      = Path(__file__).resolve().parent.parent
-INPUT_IMAGES  = BASE_DIR / "mix_data" / "images"
-INPUT_LABELS  = BASE_DIR / "mix_data" / "labels"
-OUTPUT_IMAGES = BASE_DIR / "data_augment" / "images"
-OUTPUT_LABELS = BASE_DIR / "data_augment" / "labels"
-SCALE_DATASET = 2
+# ========================== CONFIGS =================================
 
-# == OUTPUT
+# PATH CONFIGS - folder ảnh/label đầu vào và đầu ra
+INPUT_IMAGES  = MIX_IMAGES_DIR
+INPUT_LABELS  = MIX_LABELS_DIR
+OUTPUT_IMAGES = AUGMENT_IMAGES_DIR
+OUTPUT_LABELS = AUGMENT_LABELS_DIR
+
+# OUTPUT CONFIGS - tạo folder output nếu chưa có
 OUTPUT_IMAGES.mkdir(parents=True, exist_ok=True)
 OUTPUT_LABELS.mkdir(parents=True, exist_ok=True)
 
-# == AUGMENTS CONFIGS
+# DATASET SIZE CONFIGS - số bản sinh ra cho mỗi ảnh, gồm cả ảnh gốc
+SCALE_DATASET = 2
+
+# AUGMENT GROUP CONFIGS - bật/tắt từng nhóm biến đổi
 GEOMETRIC = {
     "flip_horizontal":      True,
     "flip_vertical":        True,
@@ -33,7 +42,7 @@ PHOTOMETRIC = {
     "hue_saturation":       True,
 }
 
-# == AUGMENT PROBABILITY
+# AUGMENT PROBABILITY CONFIGS - xác suất áp dụng từng biến đổi
 PROBABILITY = {
     "blur":                 0.5,
     "brightness_contrast":  0.5,
@@ -47,7 +56,7 @@ PROBABILITY = {
     "shear":                0.5,
 }
 
-# == PARAMS FOR AUGMENT
+# AUGMENT PARAMS CONFIGS - biên độ và ngưỡng cho từng biến đổi
 PARAMS = {
     "blur":             5,
     "brightness_limit": 0.3,
@@ -62,13 +71,15 @@ PARAMS = {
     "shear":            (-0.15, 0.15)
 }
 
+# ====================================================================
+
 class GeometryAugmentor:
     def __init__(self, config, prob, params):
         self.cfg   = config
         self.prob  = prob
         self.param = params
 
-    # == Flip
+    # Flip
     def flip_h(self, img, polys):
         img = cv2.flip(img, 1)
         new_polys = [[[1-x, y] for x, y in poly] for poly in polys]
@@ -79,7 +90,7 @@ class GeometryAugmentor:
         new_polys = [[[x, 1-y] for x, y in poly] for poly in polys]
         return img, new_polys
 
-    # == Rotation
+    # Rotation
     def rotate(self, img, polys, angle):
         h, w = img.shape[:2]
         M = cv2.getRotationMatrix2D((w/2, h/2), angle, 1)
@@ -98,7 +109,7 @@ class GeometryAugmentor:
 
         return img, new_polys
 
-    # == Crop 
+    # Crop 
     def crop(self, img, polys, crop_ratio):
         h, w = img.shape[:2]
         cr = random.uniform(*crop_ratio)
@@ -124,7 +135,7 @@ class GeometryAugmentor:
         cropped = cv2.resize(cropped, (w, h))
         return cropped, new_polys
 
-    # == Scale 
+    # Scale 
     def scale(self, img, polys, scale_range):
         h, w = img.shape[:2]
         sx = random.uniform(*scale_range)
@@ -156,7 +167,7 @@ class GeometryAugmentor:
 
         return canvas, new_polys
 
-    # == Shear 
+    # Shear 
     def shear(self, img, polys, shear_range):
         h, w = img.shape[:2]
 
@@ -190,7 +201,7 @@ class GeometryAugmentor:
 
         return img, new_polys
 
-    # == Apply toàn bộ augment hình học
+    # Apply toàn bộ augment hình học
     def apply(self, img, polys):
 
         if self.cfg["flip_horizontal"] and random.random() < self.prob["flip_horizontal"]:
@@ -299,8 +310,8 @@ class DatasetAugmentor:
             index += 1
             
             # # Lưu bản gốc
-            # cv2.imwrite(str(self.out_img / f"{img_path.stem}_original.jpg"), img)
-            # self.write_polygons(self.out_lbl / f"{img_path.stem}_original.txt", polys, labels)
+            cv2.imwrite(str(self.out_img / f"{img_path.stem}_original.jpg"), img)
+            self.write_polygons(self.out_lbl / f"{img_path.stem}_original.txt", polys, labels)
 
             # Tạo augment
             for i in range(self.scale - 1):
@@ -320,6 +331,8 @@ class DatasetAugmentor:
                 print(f"AUGMENT IMAGES: {index}")
 
         print("DONE AUGMENT")
+
+# ============================== MAIN ====================================
 
 if __name__ == "__main__":
     aug = DatasetAugmentor(
