@@ -1,6 +1,20 @@
 # Copy-Paste Augmentation Hạt Điều
 
-Dự án sinh dữ liệu augmentation cho bài toán hạt điều bằng phương pháp copy-paste. Pipeline chính gồm tách object từ ảnh nguồn, chuẩn hóa polygon label, dán object lên nền mới để tạo ảnh synthetic, kiểm tra lại annotation và augment thêm dữ liệu khi cần.
+Dự án sinh dữ liệu ảo, augmentation cho bài toán hạt điều bằng phương pháp copy-paste. Dự án nhầm tạo 1 pipeline làm tăng cường dữ liệu hạt điều ở môi trường công nghiệp. Giảm nỗ lực của con người trong việc phân loại và đánh nhãn trên 1 ảnh dữ liệu được kết hợp từ 13 loại
+
+## Flow pipeline
+
+<p align="center">
+  <img src="visualize/Project-Flow.png" alt="Copy-paste augmentation pipeline" width="900">
+</p>
+
+<p align="center">
+  <img src="visualize/Synthetic-Data.png" alt="Genarate Synthetic Data" width="900">
+</p>
+
+<p align="center">
+  <em>Pipeline: Copy-paste tạo synthetic data các ảnh kết hợp 13 loại hạt điều từ ảnh các loại hạt điều riêng lẻ.</em>
+</p>
 
 ## Chuẩn bị môi trường
 
@@ -40,7 +54,7 @@ Hatdieu/
 |   |-- augment.py
 |   `-- count_obj_per_class.py
 |-- background/
-|-- Data_hatdieu/
+|-- data_hatdieu/
 |-- model/
 |-- yaml/
 |-- pred_labels/        # sinh ra sau bước tách object
@@ -54,20 +68,12 @@ Hatdieu/
 
 - `src/`: chứa toàn bộ mã nguồn của pipeline sinh dữ liệu.
 - `background/`: chứa ảnh nền dùng để dán object.
-- `Data_hatdieu/`: dữ liệu ảnh nguồn theo từng class.
+- `data_hatdieu/`: dữ liệu ảnh nguồn theo từng class dùng cho chạy đầy đủ.
 - `model/`: chứa trọng số YOLO segmentation và checkpoint SAM.
 - `yaml/`: chứa cấu hình dataset và train YOLO.
 - `pred_labels/`: thư mục đầu ra của bước tách object, gồm `predict/`, `labels/` và `object/`.
 - `mix_data/`: thư mục đầu ra của bước copy-paste, gồm `images/` và `labels/`.
 - `data_augment/`: thư mục đầu ra của bước augment bổ sung.
-
-### Các script chính
-
-- `src/pred_labels.py`: tách từng hạt điều từ ảnh nguồn bằng YOLO segmentation kết hợp SAM; đầu ra là object PNG nền trong suốt, ảnh visualize dự đoán và polygon label theo định dạng YOLO segmentation. Đây là bước chuẩn bị dữ liệu object để dùng lại ở các bước sau.
-- `src/mix.py`: sinh ảnh synthetic bằng cách dán các object đã tách lên nền mới; script có cơ chế chọn ROI, giới hạn chồng lấn, cân bằng class, thêm xoay/lật ngẫu nhiên và mô phỏng bóng đổ để ảnh đầu ra tự nhiên hơn. Đây là bước cốt lõi của pipeline copy-paste augmentation.
-- `src/check_labels.py`: hiển thị ngẫu nhiên ảnh đã mix cùng polygon label để kiểm tra trực quan chất lượng annotation. Script này phục vụ QC nhanh sau khi sinh dữ liệu.
-- `src/augment.py`: augment thêm tập dữ liệu đã tạo bằng các phép biến đổi hình học và quang học như flip, rotate, crop, scale, shear, blur, noise và thay đổi màu sắc. Mục tiêu là tăng độ đa dạng dữ liệu đầu vào cho mô hình.
-- `src/count_obj_per_class.py`: đếm số object theo từng class từ thư mục label. Script này dùng để đánh giá độ cân bằng class của dataset sau khi sinh dữ liệu.
 
 ## Cách chạy
 
@@ -79,15 +85,13 @@ Thứ tự chạy khuyến nghị:
 python src/pred_labels.py
 ```
 
-Đầu ra mặc định: `pred_labels/`
-
 2. Tạo ảnh synthetic bằng copy-paste:
 
 ```powershell
 python src/mix.py
 ```
 
-Script sẽ mở cửa sổ OpenCV để chọn ROI trên ảnh nền. Nhấn `Enter` để xác nhận vùng chọn, nhấn `Esc` để xóa ROI và chọn lại. Đầu ra mặc định: `mix_data/`
+Script sẽ mở cửa sổ OpenCV để chọn ROI trên ảnh nền. Nhấn `Enter` để xác nhận vùng chọn, nhấn `Esc` để xóa ROI và chọn lại.
 
 3. Kiểm tra nhanh label của ảnh đã mix:
 
@@ -101,8 +105,6 @@ python src/check_labels.py
 python src/augment.py
 ```
 
-Đầu ra mặc định: `data_augment/`
-
 5. Thống kê số object theo class:
 
 ```powershell
@@ -111,32 +113,50 @@ python src/count_obj_per_class.py
 
 ## Cấu hình quan trọng
 
-Các script hiện được cấu hình bằng hằng số ở đầu file. Khi muốn thay đổi cách chạy, hãy sửa trực tiếp các biến tương ứng trước khi chạy lại script.
+### 1. Đường dẫn dataset và output
 
-- Muốn đổi dữ liệu nguồn cho bước tách object: sửa `SOURE_DIR` trong `src/pred_labels.py`.
-- Muốn đổi model YOLO segmentation hoặc checkpoint SAM: sửa `MODEL` và `SAM` trong `src/pred_labels.py`.
-- Muốn đổi nơi lưu kết quả bước tách object: sửa `OUT_DIR` trong `src/pred_labels.py`.
+- File: `src/config.py`
+- Các biến quan trọng:
+  - `DATA_HATDIEU_DIR` → thư mục ảnh gốc đầu vào.
+  - `PRED_LABELS_DIR` → thư mục output của bước tách object.
+  - `MIX_DATA_DIR` → thư mục output của bước copy-paste.
+  - `DATA_AUGMENT_DIR` → thư mục output của bước augment.
 
-- Muốn đổi thư mục chứa object dùng để dán: sửa `OBJECTS_DIR` trong `src/mix.py`. Thông thường biến này nên trỏ tới thư mục đầu ra của `src/pred_labels.py`, mặc định là `pred_labels/`.
-- Muốn đổi ảnh nền hoặc thư mục nền: sửa `BACKGROUND_DIR` hoặc `background_path` trong `src/mix.py`.
-- Muốn đổi nơi lưu ảnh synthetic: sửa `OUTPUT_DIR` trong `src/mix.py`.
-- Muốn tăng hoặc giảm số lượng ảnh sinh ra: sửa `N_MIX_IMG` trong `src/mix.py`.
-- Muốn tăng hoặc giảm số object trên mỗi ảnh: sửa `NUM_OBJECT` trong `src/mix.py`.
-- Muốn nới hoặc siết mức chồng lấn giữa các object: sửa `IOU` trong `src/mix.py`.
-- Muốn bật hoặc tắt các biến đổi ngẫu nhiên khi dán object: sửa `RESIZE`, `RANDOM_FLIP`, `RANDOM_ROTATE` trong `src/mix.py`.
+### 2. Cấu hình tách object và sinh label
 
-- Muốn kiểm tra thư mục ảnh và label khác: sửa `MIX_DIR`, `SOURE_DIR`, `LABELS_DIR` trong `src/check_labels.py`.
-- Muốn đổi số lượng ảnh dùng để QC nhanh: sửa `N_SAMPLES` trong `src/check_labels.py`.
-- Muốn chỉ hiển thị một class cụ thể khi kiểm tra: sửa `MODE` trong `src/check_labels.py`.
+- File: `src/pred_labels.py`
+- Các biến quan trọng:
+  - `MODEL`, `SAM` → đường dẫn checkpoint YOLO/SAM.
+  - `CONFIDENT` → ngưỡng confidence cho YOLO.
+  - `DEVICE` → `auto`, `cpu`, `cuda:0`, ...
+  - `BLUR`, `CLOSE`, `OPEN`, `FILL_HOLES`, `WATERSHED` → bật/tắt bước hậu xử lý mask.
+  - `MIN_AREA_RATIO` → lọc object quá nhỏ.
 
-- Muốn augment từ bộ dữ liệu khác: sửa `INPUT_IMAGES` và `INPUT_LABELS` trong `src/augment.py`.
-- Muốn đổi thư mục lưu dữ liệu sau augment: sửa `OUTPUT_IMAGES` và `OUTPUT_LABELS` trong `src/augment.py`.
-- Muốn tăng số lượng mẫu augment sinh thêm từ mỗi ảnh: sửa `SCALE_DATASET` trong `src/augment.py`.
-- Muốn thay đổi loại augment hoặc xác suất augment: sửa các nhóm biến `GEOMETRIC`, `PHOTOMETRIC`, `PROBABILITY`, `PARAMS` trong `src/augment.py`.
+### 3. Cấu hình sinh synthetic data
 
-- Muốn đếm thống kê trên thư mục label khác: sửa `LABEL_DIR` trong `src/count_obj_per_class.py`.
+- File: `src/mix.py`
+- Các biến quan trọng:
+  - `N_MIX_IMG` → số ảnh synthetic tạo ra.
+  - `IOU` → ngưỡng overlap giữa các object.
+  - `NUM_OBJECT` → số lượng object trên mỗi ảnh mix.
+  - `RESIZE`, `RANDOM_FLIP`, `RANDOM_ROTATE` → bật/tắt các biến đổi object trước khi dán.
+  - `SHADOW_MODE`, `X_LIGHT`, `Y_LIGHT`, `BASE_*`, `CAST_*` → điều chỉnh bóng đổ của object.
 
-## Ghi chú
+### 4. Cấu hình kiểm tra label nhanh
 
-- Theo cấu hình hiện tại, pipeline mặc định đang đồng bộ theo chuỗi `Data_hatdieu/ -> pred_labels/ -> mix_data/ -> data_augment/`.
-- Các thư mục đầu ra sẽ được tạo tự động nếu chưa tồn tại.
+- File: `src/check_labels.py`
+- Các biến quan trọng:
+  - `CHECK_IMAGES_DIR`, `CHECK_LABELS_DIR` → thư mục ảnh/label cần QC.
+  - `N_SAMPLES` → số ảnh random dùng để QC.
+  - `DISPLAY_SIZE` → kích thước cửa sổ hiển thị.
+  - `MODE` → chọn class hiển thị, `-1` là hiển thị tất cả.
+
+### 5. Cấu hình augment dữ liệu
+
+- File: `src/augment.py`
+- Các biến quan trọng:
+  - `SCALE_DATASET` → số lượng bản augment sinh ra từ mỗi ảnh gốc.
+  - `GEOMETRIC` → bật/tắt các phép biến đổi hình học.
+  - `PHOTOMETRIC` → bật/tắt các phép biến đổi ánh sáng và nhiễu.
+  - `PROBABILITY` → xác suất áp dụng từng phép augment.
+  - `PARAMS` → tham số biên độ cho từng phép augment.
