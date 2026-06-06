@@ -1,6 +1,6 @@
-# Copy-Paste Augmentation Hạt Điều
+# Copy-Paste Augmentation for Cashew Nut Dataset
 
-Dự án sinh dữ liệu ảo, augmentation cho bài toán hạt điều bằng phương pháp copy-paste. Dự án nhầm tạo 1 pipeline làm tăng cường dữ liệu hạt điều ở môi trường công nghiệp. Giảm nỗ lực của con người trong việc phân loại và đánh nhãn trên 1 ảnh dữ liệu được kết hợp từ 13 loại
+A project for generating synthetic data and augmentation for the cashew nut problem using the copy-paste method. The project aims to create a pipeline for augmenting cashew nut data in an industrial environment. It reduces human effort in classifying and labeling a data image combined from 13 types.
 
 ## Flow pipeline
 
@@ -13,17 +13,17 @@ Dự án sinh dữ liệu ảo, augmentation cho bài toán hạt điều bằng
 </p>
 
 <p align="center">
-  <em>Pipeline: Copy-paste tạo synthetic data các ảnh kết hợp 13 loại hạt điều từ ảnh các loại hạt điều riêng lẻ.</em>
+  <em>Pipeline: Copy-paste creates synthetic data as combined images of 13 types of cashew nuts from images of individual cashew nut types.</em>
 </p>
 
-## Chuẩn bị môi trường
+## Environment setup
 
-Yêu cầu:
+Requirements:
 
 - Python 3.10+
 - Git
 
-Tạo môi trường ảo trên Windows PowerShell:
+Create a virtual environment on Windows PowerShell:
 
 ```powershell
 python -m venv .venv
@@ -32,7 +32,7 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-Tạo môi trường ảo trên macOS/Linux:
+Create a virtual environment on macOS/Linux:
 
 ```bash
 python3 -m venv .venv
@@ -41,9 +41,9 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-Nếu chạy bằng GPU/CUDA, nên cài `torch` và `torchvision` đúng build của máy trước khi cài toàn bộ dependencies.
+If running with GPU/CUDA, you should install the `torch` and `torchvision` builds that match your machine before installing all dependencies.
 
-## Cấu trúc thư mục
+## Folder structure
 
 ```text
 Hatdieu/
@@ -57,106 +57,106 @@ Hatdieu/
 |-- data_hatdieu/
 |-- model/
 |-- yaml/
-|-- pred_labels/        # sinh ra sau bước tách object
-|-- mix_data/           # sinh ra sau bước copy-paste
-|-- data_augment/       # sinh ra sau bước augment
+|-- pred_labels/        # generated after the object extraction step
+|-- mix_data/           # generated after the copy-paste step
+|-- data_augment/       # generated after the augment step
 |-- requirements.txt
 `-- README.md
 ```
 
-### Ý nghĩa các thư mục chính
+### Meaning of the main folders
 
-- `src/`: chứa toàn bộ mã nguồn của pipeline sinh dữ liệu.
-- `background/`: chứa ảnh nền dùng để dán object.
-- `data_hatdieu/`: dữ liệu ảnh nguồn theo từng class dùng cho chạy đầy đủ.
-- `model/`: chứa trọng số YOLO segmentation và checkpoint SAM.
-- `yaml/`: chứa cấu hình dataset và train YOLO.
-- `pred_labels/`: thư mục đầu ra của bước tách object, gồm `predict/`, `labels/` và `object/`.
-- `mix_data/`: thư mục đầu ra của bước copy-paste, gồm `images/` và `labels/`.
-- `data_augment/`: thư mục đầu ra của bước augment bổ sung.
+- `src/`: contains all source code for the data generation pipeline.
+- `background/`: contains background images used for pasting objects.
+- `data_hatdieu/`: source image data by class used for a full run.
+- `model/`: contains YOLO segmentation weights and the SAM checkpoint.
+- `yaml/`: contains dataset configuration and YOLO training configuration.
+- `pred_labels/`: output folder of the object extraction step, including `predict/`, `labels/`, and `object/`.
+- `mix_data/`: output folder of the copy-paste step, including `images/` and `labels/`.
+- `data_augment/`: output folder of the additional augmentation step.
 
-## Cách chạy
+## How to run
 
-Thứ tự chạy khuyến nghị:
+Recommended run order:
 
-1. Tách object và sinh label trung gian từ ảnh nguồn:
+1. Extract objects and generate intermediate labels from source images:
 
 ```powershell
 python src/pred_labels.py
 ```
 
-2. Tạo ảnh synthetic bằng copy-paste:
+2. Create synthetic images using copy-paste:
 
 ```powershell
 python src/mix.py
 ```
 
-Script sẽ mở cửa sổ OpenCV để chọn ROI trên ảnh nền. Nhấn `Enter` để xác nhận vùng chọn, nhấn `Esc` để xóa ROI và chọn lại.
+The script will open an OpenCV window to select an ROI on the background image. Press `Enter` to confirm the selected region, and press `Esc` to clear the ROI and select again.
 
-3. Kiểm tra nhanh label của ảnh đã mix:
+3. Quickly check the labels of mixed images:
 
 ```powershell
 python src/check_labels.py
 ```
 
-4. Augment thêm dataset đã sinh:
+4. Further augment the generated dataset:
 
 ```powershell
 python src/augment.py
 ```
 
-5. Thống kê số object theo class:
+5. Count the number of objects per class:
 
 ```powershell
 python src/count_obj_per_class.py
 ```
 
-## Cấu hình quan trọng
+## Important configuration
 
-### 1. Đường dẫn dataset và output
+### 1. Dataset and output paths
 
 - File: `src/config.py`
-- Các biến quan trọng:
-  - `DATA_HATDIEU_DIR` → thư mục ảnh gốc đầu vào.
-  - `PRED_LABELS_DIR` → thư mục output của bước tách object.
-  - `MIX_DATA_DIR` → thư mục output của bước copy-paste.
-  - `DATA_AUGMENT_DIR` → thư mục output của bước augment.
+- Important variables:
+  - `DATA_HATDIEU_DIR` -> input original image folder.
+  - `PRED_LABELS_DIR` -> output folder of the object extraction step.
+  - `MIX_DATA_DIR` -> output folder of the copy-paste step.
+  - `DATA_AUGMENT_DIR` -> output folder of the augment step.
 
-### 2. Cấu hình tách object và sinh label
+### 2. Object extraction and label generation configuration
 
 - File: `src/pred_labels.py`
-- Các biến quan trọng:
-  - `MODEL`, `SAM` → đường dẫn checkpoint YOLO/SAM.
-  - `CONFIDENT` → ngưỡng confidence cho YOLO.
-  - `DEVICE` → `auto`, `cpu`, `cuda:0`, ...
-  - `BLUR`, `CLOSE`, `OPEN`, `FILL_HOLES`, `WATERSHED` → bật/tắt bước hậu xử lý mask.
-  - `MIN_AREA_RATIO` → lọc object quá nhỏ.
+- Important variables:
+  - `MODEL`, `SAM` -> YOLO/SAM checkpoint paths.
+  - `CONFIDENT` -> confidence threshold for YOLO.
+  - `DEVICE` -> `auto`, `cpu`, `cuda:0`, ...
+  - `BLUR`, `CLOSE`, `OPEN`, `FILL_HOLES`, `WATERSHED` -> enable/disable mask post-processing steps.
+  - `MIN_AREA_RATIO` -> filter out objects that are too small.
 
-### 3. Cấu hình sinh synthetic data
+### 3. Synthetic data generation configuration
 
 - File: `src/mix.py`
-- Các biến quan trọng:
-  - `N_MIX_IMG` → số ảnh synthetic tạo ra.
-  - `IOU` → ngưỡng overlap giữa các object.
-  - `NUM_OBJECT` → số lượng object trên mỗi ảnh mix.
-  - `RESIZE`, `RANDOM_FLIP`, `RANDOM_ROTATE` → bật/tắt các biến đổi object trước khi dán.
-  - `SHADOW_MODE`, `X_LIGHT`, `Y_LIGHT`, `BASE_*`, `CAST_*` → điều chỉnh bóng đổ của object.
+- Important variables:
+  - `N_MIX_IMG` -> number of synthetic images to create.
+  - `IOU` -> overlap threshold between objects.
+  - `NUM_OBJECT` -> number of objects on each mixed image.
+  - `RESIZE`, `RANDOM_FLIP`, `RANDOM_ROTATE` -> enable/disable object transformations before pasting.
+  - `SHADOW_MODE`, `X_LIGHT`, `Y_LIGHT`, `BASE_*`, `CAST_*` -> adjust object shadows.
 
-### 4. Cấu hình kiểm tra label nhanh
+### 4. Quick label-checking configuration
 
 - File: `src/check_labels.py`
-- Các biến quan trọng:
-  - `CHECK_IMAGES_DIR`, `CHECK_LABELS_DIR` → thư mục ảnh/label cần QC.
-  - `N_SAMPLES` → số ảnh random dùng để QC.
-  - `DISPLAY_SIZE` → kích thước cửa sổ hiển thị.
-  - `MODE` → chọn class hiển thị, `-1` là hiển thị tất cả.
+- Important variables:
+  - `CHECK_IMAGES_DIR`, `CHECK_LABELS_DIR` -> image/label folders to QC.
+  - `N_SAMPLES` -> number of random images used for QC.
+  - `DISPLAY_SIZE` -> display window size.
+  - `MODE` -> select the class to display; `-1` displays all.
 
-### 5. Cấu hình augment dữ liệu
+### 5. Data augmentation configuration
 
 - File: `src/augment.py`
-- Các biến quan trọng:
-  - `SCALE_DATASET` → số lượng bản augment sinh ra từ mỗi ảnh gốc.
-  - `GEOMETRIC` → bật/tắt các phép biến đổi hình học.
-  - `PHOTOMETRIC` → bật/tắt các phép biến đổi ánh sáng và nhiễu.
-  - `PROBABILITY` → xác suất áp dụng từng phép augment.
-  - `PARAMS` → tham số biên độ cho từng phép augment.
+- Important variables:
+  - `SCALE_DATASET` -> number of augmented versions generated from each original image.
+  - `GEOMETRIC` -> enable/disable geometric transformations.
+  - `PHOTOMETRIC` -> enable/disable lighting and noise transformations.
+  - `PROBABILITY` -> probability of applying each augmentation operation.
+  - `PARAMS` -> amplitude parameters for each augmentation operation.
